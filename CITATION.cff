@@ -1,0 +1,37 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: Riemannian-PO-for-LQG
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file.
+type: software
+authors:
+  - given-names: Spencer
+    family-names: Kraisler
+    email: spencerkraisler@gmail.com
+    affiliation: University of Washington
+    orcid: 'https://orcid.org/0009-0009-4674-0104'
+  - given-names: Mehran
+    family-names: Mesbahi
+    email: mesbahi@uw.edu
+    affiliation: University of Washington
+repository-code: 'https://github.com/Rainlabuw/Riemannian-PO-for-LQG'
+abstract: >-
+  This is an implementation of my paper Dynamic
+  Output-feedback Synthesis Orbit Geometry: Quotient
+  Manifolds and LQG Direct Policy Optimization by Kraisler
+  and Mesbahi.
+
+
+  This repo is an implementation of gradient descent (GD) on
+  the Linear-Quadratic-Gaussian (LQG) cost. It also performs
+  Riemannian gradient descent (RGD) with respect to the
+  Krishnaprasad-Martin (KM) metric introduced in the above
+  paper.
+keywords:
+  - machine-learning
+  - optimization
+  - optimal-control
+  - policy-optimization
