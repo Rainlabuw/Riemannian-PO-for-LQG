@@ -81,6 +81,29 @@ class LinearSystemContainer:
         self.LQG_opt = self.LQG(self.Kopt)
 
     @staticmethod
+    def eig(A: np.ndarray) -> np.ndarray:
+        """Returns eigenvalues of A. Made a wrapper so I do not have to index
+        the eig() method from NumPy."""
+        return np.linalg.eig(A)[0]
+
+    @staticmethod
+    def is_symmetric(A: np.ndarray, tol: float=1e-5) -> bool:
+        """Returns true if A is symmetric, within tolerance tol."""
+        return np.linalg.norm(A - A.T) < tol
+
+    @staticmethod
+    def is_positive_semidefinite(A: np.ndarray, tol: float = 1e-5) -> bool:
+        """returns true if A is positive semi-definite, within tolerance tol."""
+        return LinearSystemContainer.is_symmetric(A, tol) and \
+            min(LinearSystemContainer.eig(A)) >= 0
+    
+    @staticmethod
+    def is_positive_definite(A: np.ndarray, tol: float = 1e-5) -> bool:
+        """returns true if A is positive definite, within tolerance tol."""
+        return LinearSystemContainer.is_symmetric(A, tol) and \
+            min(LinearSystemContainer.eig(A)) > tol
+
+    @staticmethod
     def lqr(
         A: np.ndarray, B: np.ndarray, Q: np.ndarray, R: np.ndarray
     ) -> np.ndarray:
@@ -88,12 +111,6 @@ class LinearSystemContainer:
         sign flip for the LQR (impling A + BK is stable), and so I do not have 
         to index the lqr() method from the python control library."""
         return -ct.lqr(A, B, Q, R)[0]
-    
-    @staticmethod
-    def eig(A: np.ndarray) -> np.ndarray:
-        """Returns eigenvalues of A. Made a wrapper so I do not have to index
-        the eig() method from NumPy."""
-        return np.linalg.eig(A)[0]
 
     @staticmethod
     def is_controllable(A: np.ndarray, B: np.ndarray) -> bool:
@@ -117,10 +134,19 @@ class LinearSystemContainer:
         """Computes the spectral absicca of A. That is, max real part of the 
         eigenvalues."""
         return np.max(np.real(LinearSystemContainer.eig(A)))
+    
+    @staticmethod
+    def is_stable(A: np.ndarray, tol:float = 1e-5) -> bool:
+        """returns true if A is Hurwitz stable, within tolerance tol."""
+        return LinearSystemContainer.alpha(A) < -tol
 
     @staticmethod
     def mat2block(A: np.ndarray, B: np.ndarray, C: np.ndarray) -> np.ndarray:
         """Constructs [0,C;B,A] block matrix from (A,B,C)."""
+        if A.shape[0] != B.shape[0]:
+            raise ValueError("(A,B) do not have compatible dimensions.")
+        if A.shape[0] != C.shape[1]:
+            raise ValueError("(A,C) do not have compatible dimensions.")
         return np.block([
             [np.zeros((C.shape[0], B.shape[1])), C],
             [B, A]
@@ -137,7 +163,11 @@ class LinearSystemContainer:
         unique solution to AP + PA' = -Q. Note: This wrapper was created 
         because sometimes ct.lyap(A,Q) returns an error if Q is just slightly
         not symmetric. So, we assume Q is meant to be symmetric in this method.
+
+        Throws error if Q is not symmetric.
         """
+        if not LinearSystemContainer.is_symmetric(Q):
+            raise ValueError("Q is not symmetric.")
         return ct.lyap(A, LinearSystemContainer.sym(Q))
     
     @staticmethod
@@ -183,6 +213,8 @@ class LinearSystemContainer:
     
     def block2mat(self, P: np.ndarray) -> np.ndarray:
         """Returns the system matrices A,B,C from the given block matix P."""
+        if P.shape != (self.n + self.m, self.n + self.p):
+            raise ValueError("P has incorrect dimensions.")
         A = P[-self.n:, -self.n:]
         B = P[-self.n:, :self.p]
         C = P[:self.m, -self.n:]
@@ -191,13 +223,15 @@ class LinearSystemContainer:
     def coords_trans(self, T: np.ndarray, P: np.ndarray) -> np.ndarray:
         """Performs a coordinate transformation on the internal state of the 
         given system P via the similarity transformation T."""
+        if T.shape != (self.n, self.n):
+            raise ValueError("T has incorrect dimensions.")
         A, B, C = self.block2mat(P)
-        invT = np.linalg.inv(T)
-        return self.mat2block(T@A@invT, T@B, C@invT)
+        inv_T = np.linalg.inv(T)
+        return self.mat2block(T@A@inv_T, T@B, C@inv_T)
     
     def is_stabilizing(self, K: np.ndarray) -> bool:
         """Checks if K is a stabilizing matrix."""
-        return self.alpha(self.Acl(K)) < 0
+        return self.is_stable(self.Acl(K))
 
     def Acl(self, K: np.ndarray) -> np.ndarray:
         """Constructs the closed-loop state matrix with the controller K."""
@@ -289,10 +323,12 @@ class LinearSystemContainer:
 
     def LQG(self, K: np.ndarray) -> float:
         """Computes the LQG cost of the plant (A,B,C) with controller K."""
+        
         return np.trace(self.Qcl(K)@self.X(K))
     
     def dLQG(self, K: np.ndarray, V: np.ndarray) -> float:
         """Computes the differential of the LQG cost at K along V."""
+
         _, _, C_K = self.block2mat(K)
         _, _, G = self.block2mat(V)
         X = self.X(K)
@@ -313,6 +349,7 @@ class LinearSystemContainer:
     
     def grad_LQG(self, K: np.ndarray) -> np.ndarray:
         """Computes the Euclidean gradient of the LQG cost at K."""
+
         _, B_K, C_K = self.block2mat(K)
         X = self.X(K)
         Y = self.Y(K)

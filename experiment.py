@@ -229,5 +229,5 @@ create_plot(
 
 plt.tight_layout()
 
-#plt.savefig("./media/plot_revised.pdf", format="pdf")
+#plt.savefig("./plot.pdf", format="pdf")
 plt.show()
