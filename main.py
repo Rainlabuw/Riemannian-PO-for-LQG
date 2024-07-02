@@ -2,7 +2,7 @@ from LQG_methods import *
 import numpy as np
 import control as ct
 import matplotlib.pyplot as plt
-
+# Spencer was here!
 # initialize parameters 
 np.random.seed(20)
 num_steps = 300
