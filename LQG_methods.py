@@ -7,7 +7,163 @@ import numpy as np
 import control as ct
 from scipy.linalg import sqrtm, cho_solve, cho_factor
 
-class LinearSystemContainer:
+# class LinearSystem:
+#     def __init__(
+#             self,
+#             A: np.ndarray,
+#             B: np.ndarray,
+#             C: np.ndarray,
+#             W: np.ndarray,
+#             V: np.ndarray
+#         ) -> None:
+        
+#         self.A = A # state matrix
+#         self.B = B # input matrix
+#         self.C = C # output matrix
+#         self.W = W # system noise
+#         self.V = V # measurement noise
+#         self.n = A.shape[0] # state dim
+#         self.m = B.shape[1] # input dim
+#         self.p = C.shape[0] # output dim
+
+#         # ensure (A,B,C) is in minimal state-space form
+#         if not ControllerContainer.is_minimal(A, B, C):
+#             raise ValueError("(A,B,C) is not minimal.")
+        
+#         # ensure (A,W) is controllable so LQG is well-defined
+#         if not LinearSystem.is_controllable(A, sqrtm(W)):
+#             raise ValueError("(A,sqrt(W)) is not controllable.")
+        
+#         # ensure (A,Q) is observable so LQG is well-defined
+#         if not LinearSystem.is_observable(A, sqrtm(Q)):
+#             raise ValueError("(A,sqrt(Q)) is not observable.")
+        
+#         self.I_n = np.eye(self.n)
+#         self.I_m = np.eye(self.m)
+#         self.I_p = np.eye(self.p)
+
+#         self.basis = []
+#         for i in range(self.n + self.m):
+#             for j in range(self.n + self.p):
+#                 if i >= self.m or j >= self.p:
+#                     E = np.zeros((self.n + self.m, self.n + self.p))
+#                     E[i,j] = 1
+#                     self.basis.append(E)
+#         self.N = len(self.basis)
+
+#     @staticmethod
+#     def eig(A: np.ndarray) -> np.ndarray:
+#         """Returns eigenvalues of A. Made a wrapper so I do not have to index
+#         the eig() method from NumPy."""
+#         return np.linalg.eig(A)[0]
+
+#     @staticmethod
+#     def is_symmetric(A: np.ndarray, tol: float=1e-5) -> bool:
+#         """Returns true if A is symmetric, within tolerance tol."""
+#         return np.linalg.norm(A - A.T) < tol
+
+#     @staticmethod
+#     def is_positive_semidefinite(A: np.ndarray, tol: float = 1e-5) -> bool:
+#         """returns true if A is positive semi-definite, within tolerance tol."""
+#         return ControllerContainer.is_symmetric(A, tol) and \
+#             min(ControllerContainer.eig(A)) >= 0
+    
+#     @staticmethod
+#     def is_positive_definite(A: np.ndarray, tol: float = 1e-5) -> bool:
+#         """returns true if A is positive definite, within tolerance tol."""
+#         return ControllerContainer.is_symmetric(A, tol) and \
+#             min(ControllerContainer.eig(A)) > tol
+
+#     @staticmethod
+#     def is_controllable(A: np.ndarray, B: np.ndarray) -> bool:
+#         """Returns true if (A,B) is controllable and false otherwise."""
+#         return np.linalg.matrix_rank(ct.ctrb(A, B)) == A.shape[0]
+    
+#     @staticmethod
+#     def is_observable(A: np.ndarray, C: np.ndarray) -> bool:
+#         """Returns true if (A,B) is observable and false otherwise."""
+#         return np.linalg.matrix_rank(ct.obsv(A, C)) == A.shape[0]
+    
+#     @staticmethod
+#     def is_minimal(A: np.ndarray, B: np.ndarray, C: np.ndarray) -> bool:
+#         """Returns true if (A,B) is controllable and (A,C) is observable, and
+#         false otherwise."""
+#         return ControllerContainer.is_controllable(A, B) and \
+#             ControllerContainer.is_observable(A, C)
+
+#     @staticmethod
+#     def alpha(A: np.ndarray) -> float:
+#         """Computes the spectral absicca of A. That is, max real part of the 
+#         eigenvalues."""
+#         return np.max(np.real(ControllerContainer.eig(A)))
+    
+#     @staticmethod
+#     def is_stable(A: np.ndarray, tol:float = 1e-5) -> bool:
+#         """returns true if A is Hurwitz stable, within tolerance tol."""
+#         return ControllerContainer.alpha(A) < -tol
+
+#     @staticmethod
+#     def mat2block(A: np.ndarray, B: np.ndarray, C: np.ndarray) -> np.ndarray:
+#         """Constructs [0,C;B,A] block matrix from (A,B,C)."""
+#         if A.shape[0] != B.shape[0]:
+#             raise ValueError("(A,B) do not have compatible dimensions.")
+#         if A.shape[0] != C.shape[1]:
+#             raise ValueError("(A,C) do not have compatible dimensions.")
+#         return np.block([
+#             [np.zeros((C.shape[0], B.shape[1])), C],
+#             [B, A]
+#         ])
+    
+#     @staticmethod
+#     def sym(Q: np.ndarray) -> np.ndarray:
+#         """Computes the symmetric part of a matrix."""
+#         return (Q + Q.T)/2
+    
+#     @staticmethod
+#     def lyap(A: np.ndarray, Q: np.ndarray) -> np.ndarray:
+#         """Given Hurwitz stable A and positive semi-definite Q, computes the 
+#         unique solution to AP + PA' = -Q. Note: This wrapper was created 
+#         because sometimes ct.lyap(A,Q) returns an error if Q is just slightly
+#         not symmetric. So, we assume Q is meant to be symmetric in this method.
+
+#         Throws error if Q is not symmetric.
+#         """
+#         if not ControllerContainer.is_symmetric(Q):
+#             raise ValueError("Q is not symmetric.")
+#         return ct.lyap(A, ControllerContainer.sym(Q))
+    
+#     @staticmethod
+#     def dlyap(
+#         A: np.ndarray, Q: np.ndarray, E: np.ndarray, F: np.ndarray
+#     ) -> np.ndarray:
+#         """Returns the differential of the Lyapunov operator at (A,Q) along 
+#         direction (E,F). Here, E,F are arbitrary matrices of the correct 
+#         dimensions; A is Hurwitz stable, and Q is positive semi-definite."""
+#         return ControllerContainer.lyap(
+#             A, 
+#             E@ControllerContainer.lyap(A, Q) + \
+#                 ControllerContainer.lyap(A, Q)@E.T + F
+#         )
+    
+#     def block2mat(self, P: np.ndarray) -> np.ndarray:
+#         """Returns the system matrices A,B,C from the given block matix P."""
+#         if P.shape != (self.n + self.m, self.n + self.p):
+#             raise ValueError("P has incorrect dimensions.")
+#         A = P[-self.n:, -self.n:]
+#         B = P[-self.n:, :self.p]
+#         C = P[:self.m, -self.n:]
+#         return A, B, C
+
+#     def coords_trans(self, T: np.ndarray, P: np.ndarray) -> np.ndarray:
+#         """Performs a coordinate transformation on the internal state of the 
+#         given system P via the similarity transformation T."""
+#         if T.shape != (self.n, self.n):
+#             raise ValueError("T has incorrect dimensions.")
+#         A, B, C = self.block2mat(P)
+#         inv_T = np.linalg.inv(T)
+#         return self.mat2block(T@A@inv_T, T@B, C@inv_T)
+
+class ControllerContainer:
     """A container of various methods for conducting gradient descent over
     the domain of stabilizing output-feedback controllers for a given
     plant P. 
@@ -47,7 +203,7 @@ class LinearSystemContainer:
         self.n = A.shape[0] # state dim
         self.m = B.shape[1] # input dim
         self.p = C.shape[0] # output dim
-        if q is None:
+        if q is None or q == self.n:
             self.q = self.n
             self.is_full_ordered = True
         else:
@@ -55,15 +211,15 @@ class LinearSystemContainer:
             self.is_full_ordered = False
 
         # ensure (A,B,C) is in minimal state-space form
-        if not LinearSystemContainer.is_minimal(A, B, C):
+        if not ControllerContainer.is_minimal(A, B, C):
             raise ValueError("(A,B,C) is not minimal.")
         
         # ensure (A,W) is controllable so LQG is well-defined
-        if not LinearSystemContainer.is_controllable(A, sqrtm(W)):
+        if not ControllerContainer.is_controllable(A, sqrtm(W)):
             raise ValueError("(A,sqrt(W)) is not controllable.")
         
         # ensure (A,Q) is observable so LQG is well-defined
-        if not LinearSystemContainer.is_observable(A, sqrtm(Q)):
+        if not ControllerContainer.is_observable(A, sqrtm(Q)):
             raise ValueError("(A,sqrt(Q)) is not observable.")
         
         self.I_n = np.eye(self.n)
@@ -81,8 +237,8 @@ class LinearSystemContainer:
         self.N = len(self.basis)
 
         if self.is_full_ordered:
-            Fopt = LinearSystemContainer.lqr(self.A, self.B, self.Q, self.R)
-            Lopt = LinearSystemContainer.lqr(self.A.T, self.C.T, self.W, self.V).T
+            Fopt = ControllerContainer.lqr(self.A, self.B, self.Q, self.R)
+            Lopt = ControllerContainer.lqr(self.A.T, self.C.T, self.W, self.V).T
             A_Kopt = A + B@Fopt + Lopt@C
             B_Kopt = -Lopt
             C_Kopt = Fopt
@@ -103,14 +259,14 @@ class LinearSystemContainer:
     @staticmethod
     def is_positive_semidefinite(A: np.ndarray, tol: float = 1e-5) -> bool:
         """returns true if A is positive semi-definite, within tolerance tol."""
-        return LinearSystemContainer.is_symmetric(A, tol) and \
-            min(LinearSystemContainer.eig(A)) >= 0
+        return ControllerContainer.is_symmetric(A, tol) and \
+            min(ControllerContainer.eig(A)) >= 0
     
     @staticmethod
     def is_positive_definite(A: np.ndarray, tol: float = 1e-5) -> bool:
         """returns true if A is positive definite, within tolerance tol."""
-        return LinearSystemContainer.is_symmetric(A, tol) and \
-            min(LinearSystemContainer.eig(A)) > tol
+        return ControllerContainer.is_symmetric(A, tol) and \
+            min(ControllerContainer.eig(A)) > tol
 
     @staticmethod
     def lqr(
@@ -135,19 +291,19 @@ class LinearSystemContainer:
     def is_minimal(A: np.ndarray, B: np.ndarray, C: np.ndarray) -> bool:
         """Returns true if (A,B) is controllable and (A,C) is observable, and
         false otherwise."""
-        return LinearSystemContainer.is_controllable(A, B) and \
-            LinearSystemContainer.is_observable(A, C)
+        return ControllerContainer.is_controllable(A, B) and \
+            ControllerContainer.is_observable(A, C)
 
     @staticmethod
     def alpha(A: np.ndarray) -> float:
         """Computes the spectral absicca of A. That is, max real part of the 
         eigenvalues."""
-        return np.max(np.real(LinearSystemContainer.eig(A)))
+        return np.max(np.real(ControllerContainer.eig(A)))
     
     @staticmethod
     def is_stable(A: np.ndarray, tol:float = 1e-5) -> bool:
         """returns true if A is Hurwitz stable, within tolerance tol."""
-        return LinearSystemContainer.alpha(A) < -tol
+        return ControllerContainer.alpha(A) < -tol
 
     @staticmethod
     def mat2block(A: np.ndarray, B: np.ndarray, C: np.ndarray) -> np.ndarray:
@@ -175,9 +331,9 @@ class LinearSystemContainer:
 
         Throws error if Q is not symmetric.
         """
-        if not LinearSystemContainer.is_symmetric(Q):
+        if not ControllerContainer.is_symmetric(Q):
             raise ValueError("Q is not symmetric.")
-        return ct.lyap(A, LinearSystemContainer.sym(Q))
+        return ct.lyap(A, ControllerContainer.sym(Q))
     
     @staticmethod
     def dlyap(
@@ -186,47 +342,48 @@ class LinearSystemContainer:
         """Returns the differential of the Lyapunov operator at (A,Q) along 
         direction (E,F). Here, E,F are arbitrary matrices of the correct 
         dimensions; A is Hurwitz stable, and Q is positive semi-definite."""
-        return LinearSystemContainer.lyap(
+        return ControllerContainer.lyap(
             A, 
-            E@LinearSystemContainer.lyap(A, Q) + \
-                LinearSystemContainer.lyap(A, Q)@E.T + F
+            E@ControllerContainer.lyap(A, Q) + \
+                ControllerContainer.lyap(A, Q)@E.T + F
         )
     
-    def rand(self, pole_placement:bool = True) -> np.ndarray:
+    def rand_pole_placement(self) -> np.ndarray:
         """Returns a random stabilizing output feedback system. Generation is 
         done by constructing a random filter and random state-feedback 
-        stabilizer with eigenvalues between -2 and -1.
+        stabilizer with eigenvalues between -2 and -1."""
 
-        If pole_placement = False, K is generated by choosing a random K
-        r=.5 distance away from K0 (in terms of the Frobenius norm)."""
+        F = -ct.place(self.A, self.B, np.random.rand(self.n) - 2)
+        L = -ct.place(self.A.T, self.C.T, np.random.rand(self.n) - 2).T
+        A_K = self.A + self.B@F + L@self.C
+        B_K = -L
+        C_K = F
+        K = self.mat2block(A_K, B_K, C_K)
+        return K
+    
+    def rand(self) -> np.ndarray:
+        """Returns a random stabilizing output feedback system. K is generated 
+        by choosing a random K r=.5 distance away from K0."""
 
-        if pole_placement:
-            F = -ct.place(self.A, self.B, np.random.rand(self.n) - 2)
-            L = -ct.place(self.A.T, self.C.T, np.random.rand(self.n) - 2).T
-            A_K = self.A + self.B@F + L@self.C
-            B_K = -L
-            C_K = F
-            K = self.mat2block(A_K, B_K, C_K)
+        if self.is_full_ordered:
+            r = .5
+            while True:
+                A_Kopt, B_Kopt, C_Kopt = self.block2mat(self.Kopt)
+                A_K = A_Kopt + r*np.random.randn(self.n, self.n)
+                B_K = B_Kopt + r*np.random.randn(self.n, self.p)
+                C_K = C_Kopt + r*np.random.randn(self.m, self.n)
+                K = self.mat2block(A_K, B_K, C_K)
+                if self.is_stabilizing(K) and self.is_minimal(A_K, B_K, C_K):
+                    break
         else:
-            if self.is_full_ordered:
-                r = .5
-                while True:
-                    A_Kopt, B_Kopt, C_Kopt = self.block2mat(self.Kopt)
-                    A_K = A_Kopt + r*np.random.randn(self.n, self.n)
-                    B_K = B_Kopt + r*np.random.randn(self.n, self.p)
-                    C_K = C_Kopt + r*np.random.randn(self.m, self.n)
-                    K = self.mat2block(A_K, B_K, C_K)
-                    if self.is_stabilizing(K) and self.is_minimal(A_K, B_K, C_K):
-                        break
-            else:
-                r = 10
-                while True:
-                    A_K = r*np.random.randn(self.q, self.q)
-                    B_K = r*np.random.randn(self.q, self.p)
-                    C_K = r*np.random.randn(self.m, self.q)
-                    K = self.mat2block(A_K, B_K, C_K)
-                    if self.is_stabilizing(K) and self.is_minimal(A_K, B_K, C_K):
-                        break
+            r = 10
+            while True:
+                A_K = r*np.random.randn(self.q, self.q)
+                B_K = r*np.random.randn(self.q, self.p)
+                C_K = r*np.random.randn(self.m, self.q)
+                K = self.mat2block(A_K, B_K, C_K)
+                if self.is_stabilizing(K) and self.is_minimal(A_K, B_K, C_K):
+                    break
         return K
     
     def block2mat(self, P: np.ndarray) -> np.ndarray:
@@ -293,35 +450,17 @@ class LinearSystemContainer:
     
     def dBcl(self, V: np.ndarray) -> np.ndarray:
         _, F, _ = self.block2mat(V)
-        out = np.zeros((self.n + self.q, self.n + self.p))
-        out[self.n:,self.p:] = F
-        return out
+        return np.block([
+            [np.zeros((self.n, self.n)), np.zeros((self.n, self.p))],
+            [np.zeros((self.q, self.n)), F]
+        ])
     
-    def X(self, K: np.ndarray) -> np.ndarray:
-        """Computes the X(.) operator."""
-        return self.lyap(self.Acl(K), self.Wcl(K))
-    
-    def dX(self, K: np.ndarray, V: np.ndarray) -> np.ndarray:
-        """Computes the differential of X(.) at K along V."""
-        _, B_K, _ = self.block2mat(K)
-        _, F, _ = self.block2mat(V)
-        out = self.dlyap(self.Acl(K), np.block([
-            [self.W, np.zeros((self.n, self.n))],
-            [np.zeros((self.n, self.n)), B_K@self.V@B_K.T]
-        ]), self.dAcl(V), np.block([
-            [np.zeros((self.n, 2*self.n))],
-            [np.zeros((self.n, self.n)), F@self.V@B_K.T + B_K@self.V@F.T]
-        ]))
-        return out
-
-
-    def Y(self, K: np.ndarray) -> np.ndarray:
-        """Computes the Y(.) operator at K."""
-        _, _, C_K = self.block2mat(K)
-        return self.lyap(self.Acl(K).T, np.block([
-            [self.Q, np.zeros((self.n, self.n))],
-            [np.zeros((self.n, self.n)), C_K.T@self.R@C_K]
-        ]))
+    def dCcl(self, V: np.ndarray) -> np.ndarray:
+        _, _, G = self.block2mat(V)
+        return np.block([
+            [np.zeros((self.p, self.n)), np.zeros((self.p, self.q))],
+            [np.zeros((self.m, self.n)), G]
+        ])
     
     def Wcl(self, K: np.ndarray) -> np.ndarray:
         """Computes the Wcl(.) operator at K."""
@@ -330,6 +469,41 @@ class LinearSystemContainer:
             [self.W, np.zeros((self.n, self.q))],
             [np.zeros((self.q, self.n)), B_K@self.V@B_K.T]
         ])
+    
+    def X(self, K: np.ndarray) -> np.ndarray:
+        """Computes the X(.) operator."""
+        return self.lyap(self.Acl(K), self.Wcl(K))
+    
+    def dWcl(self, K: np.ndarray, V: np.ndarray) -> np.ndarray:
+        _, B_K, _ = self.block2mat(K)
+        _, F, _ = self.block2mat(V)
+        return np.block([
+            [np.zeros((self.n, self.n)), np.zeros((self.n, self.q))],
+            [np.zeros((self.q, self.n)), F@self.V@B_K.T + B_K@self.V@F.T]
+        ])
+    
+    def dX(self, K: np.ndarray, V: np.ndarray) -> np.ndarray:
+        """Computes the differential of X(.) at K along V."""
+        _, B_K, _ = self.block2mat(K)
+        _, F, _ = self.block2mat(V)
+        out = self.dlyap(
+            self.Acl(K), 
+            self.Wcl(K), 
+            self.dAcl(V),
+            self.dWcl(K, V)
+        )
+        return out
+
+    def Y(self, K: np.ndarray) -> np.ndarray:
+        """Computes the Y(.) operator at K."""
+        _, _, C_K = self.block2mat(K)
+        return self.lyap(
+            self.Acl(K).T, 
+            np.block([
+                [self.Q, np.zeros((self.n, self.q))],
+                [np.zeros((self.q, self.n)), C_K.T@self.R@C_K]
+            ])
+        )
 
     def Qcl(self, K: np.ndarray) -> np.ndarray:
         """Computes the Qcl(.) operator at K."""
@@ -338,32 +512,27 @@ class LinearSystemContainer:
             [self.Q, np.zeros((self.n, self.q))],
             [np.zeros((self.q, self.n)), C_K.T@self.R@C_K]
         ])
+    
+    def dQcl(self, K: np.ndarray, V: np.ndarray) -> np.ndarray:
+        _, _, C_K = self.block2mat(K)
+        _, _, G = self.block2mat(V)
+        return np.block([
+            [np.zeros((self.n, self.n)), np.zeros((self.n, self.q))],
+            [np.zeros((self.q, self.n)), G.T@self.R@C_K + C_K.T@self.R@G]
+        ])
 
     def LQG(self, K: np.ndarray) -> float:
         """Computes the LQG cost of the plant (A,B,C) with controller K."""
         
         return np.trace(self.Qcl(K)@self.X(K))
     
-    def dLQG(self, K: np.ndarray, V: np.ndarray) -> float:
+    def dLQG(self, K: np.ndarray, V:np.ndarray) -> float:
         """Computes the differential of the LQG cost at K along V."""
 
-        _, _, C_K = self.block2mat(K)
-        _, _, G = self.block2mat(V)
-        X = self.X(K)
-        dX = self.dX(K, V)
-        out = 0
-        M1 = np.block([
-            [self.Q, np.zeros((self.n, self.n))],
-            [np.zeros((self.n, self.n)), C_K.T@self.R@C_K]
-        ])
-        dM1 = np.block([
-            [np.zeros((self.n, self.n)), np.zeros((self.n, self.n))],
-            [np.zeros((self.n, self.n)), G.T@self.R@C_K + C_K.T@self.R@G]
-        ])
-        out += np.trace(
-            dM1@X + M1@dX
+        return np.trace(
+            self.dQcl(K, V)@self.X(K) + \
+            self.Qcl(K)@self.dX(K, V)
         )
-        return out
     
     def grad_LQG(self, K: np.ndarray) -> np.ndarray:
         """Computes the Euclidean gradient of the LQG cost at K."""
@@ -390,8 +559,6 @@ class LinearSystemContainer:
         Dynamic Output-feedback Synthesis Orbit Geometry: Quotient Manifolds and 
         LQG Direct Policy Optimization for more information."""
 
-        E1, F1, G1 = self.block2mat(V)
-        E2, F2, G2 = self.block2mat(W)
         if len(kwargs) == 0:
             sys = ct.StateSpace(
                 self.Acl(K), self.Bcl(K), self.Ccl(K), self.Dcl()
@@ -402,37 +569,19 @@ class LinearSystemContainer:
             Wc = kwargs['Wc']
             Wo = kwargs['Wo']
 
-        E_hat1 = np.block([
-            [np.zeros((self.n, self.n)), self.B@G1],
-            [F1@self.C, E1]
-        ])
-        F_hat1 = np.block([
-            [np.zeros((self.n, self.n)), np.zeros((self.n, self.p))],
-            [np.zeros((self.n, self.n)), F1]
-        ])
-        G_hat1 = np.block([
-            [np.zeros((self.p, self.n)), np.zeros((self.p, self.n))],
-            [np.zeros((self.m, self.n)), G1]
-        ])
-        E_hat2 = np.block([
-            [np.zeros((self.n, self.n)), self.B@G2],
-            [F2@self.C, E2]
-        ])
-        F_hat2 = np.block([
-            [np.zeros((self.n, self.n)), np.zeros((self.n, self.p))],
-            [np.zeros((self.n, self.n)), F2]
-        ])
-        G_hat2 = np.block([
-            [np.zeros((self.p, self.n)), np.zeros((self.p, self.n))],
-            [np.zeros((self.m, self.n)), G2]
-        ])
+        E1_hat = self.dAcl(V)
+        E2_hat = self.dAcl(W)
+        F1_hat = self.dBcl(V)
+        F2_hat = self.dBcl(W)
+        G1_hat = self.dCcl(V)
+        G2_hat = self.dCcl(W)
 
-        return w[0]*np.trace(Wo@E_hat1@Wc@E_hat2.T) + \
-            w[1]*np.trace(F_hat1.T@Wo@F_hat2) + \
-            w[2]*np.trace(G_hat1@Wc@G_hat2.T)
+        return w[0]*np.trace(Wo@E1_hat@Wc@E2_hat.T) + \
+            w[1]*np.trace(F1_hat.T@Wo@F2_hat) + \
+            w[2]*np.trace(G1_hat@Wc@G2_hat.T)
 
 
-    def g_coords(self, w: tuple, K: np.ndarray) -> np.ndarray:
+    def g_coords(self, K: np.ndarray, w: tuple) -> np.ndarray:
         """Computes the coordinates of the KM metric at K (with parameters w).
         """
         sys = ct.StateSpace(self.Acl(K), self.Bcl(K), self.Ccl(K), self.Dcl())
@@ -451,7 +600,7 @@ class LinearSystemContainer:
     ) -> np.ndarray:
         """Computes the Riemannian gradient of LQG at K wrt the KM metric 
         (with parameters w)."""
-        G = self.g_coords(w, K)
+        G = self.g_coords(K, w)
         b = np.zeros(self.N)
         for i in range(self.N):
             Ei = self.basis[i]
@@ -459,7 +608,7 @@ class LinearSystemContainer:
         x = np.zeros(self.N)
         L, low = cho_factor(G)
         x = cho_solve((L,low), b) # Chomsky Decomp. to speed up performance.
-        V = np.zeros((self.n + self.m, self.n + self.p))
+        V = np.zeros((self.q + self.m, self.q + self.p))
         for i in range(self.N):
             Ei = self.basis[i]
             V += x[i]*Ei
@@ -482,7 +631,10 @@ class LinearSystemContainer:
         K = K0.copy()
         for t in range(num_steps):
             LQG_K = self.LQG(K)
-            error = LQG_K - self.LQG_opt
+            if self.is_full_ordered:
+                error = LQG_K - self.LQG_opt
+            else:
+                error = LQG_K
             if error < 1e-5:
                 print("Machine precision reached.")
                 break
