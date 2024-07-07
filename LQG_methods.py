@@ -33,7 +33,8 @@ class LinearSystemContainer:
             Q: np.ndarray, 
             R: np.ndarray, 
             W: np.ndarray,
-            V: np.ndarray
+            V: np.ndarray,
+            q: int = None
         ) -> None:
         
         self.A = A # state matrix
@@ -46,6 +47,12 @@ class LinearSystemContainer:
         self.n = A.shape[0] # state dim
         self.m = B.shape[1] # input dim
         self.p = C.shape[0] # output dim
+        if q is None:
+            self.q = self.n
+            self.is_full_ordered = True
+        else:
+            self.q = q
+            self.is_full_ordered = False
 
         # ensure (A,B,C) is in minimal state-space form
         if not LinearSystemContainer.is_minimal(A, B, C):
@@ -62,23 +69,25 @@ class LinearSystemContainer:
         self.I_n = np.eye(self.n)
         self.I_m = np.eye(self.m)
         self.I_p = np.eye(self.p)
+        self.I_q = np.eye(self.q)
 
         self.basis = []
-        for i in range(self.n + self.m):
-            for j in range(self.n + self.p):
+        for i in range(self.q + self.m):
+            for j in range(self.q + self.p):
                 if i >= self.m or j >= self.p:
-                    E = np.zeros((self.n + self.m, self.n + self.p))
+                    E = np.zeros((self.q + self.m, self.q + self.p))
                     E[i,j] = 1
                     self.basis.append(E)
         self.N = len(self.basis)
 
-        Fopt = LinearSystemContainer.lqr(self.A, self.B, self.Q, self.R)
-        Lopt = LinearSystemContainer.lqr(self.A.T, self.C.T, self.W, self.V).T
-        A_Kopt = A + B@Fopt + Lopt@C
-        B_Kopt = -Lopt
-        C_Kopt = Fopt
-        self.Kopt = self.mat2block(A_Kopt, B_Kopt, C_Kopt)
-        self.LQG_opt = self.LQG(self.Kopt)
+        if self.is_full_ordered:
+            Fopt = LinearSystemContainer.lqr(self.A, self.B, self.Q, self.R)
+            Lopt = LinearSystemContainer.lqr(self.A.T, self.C.T, self.W, self.V).T
+            A_Kopt = A + B@Fopt + Lopt@C
+            B_Kopt = -Lopt
+            C_Kopt = Fopt
+            self.Kopt = self.mat2block(A_Kopt, B_Kopt, C_Kopt)
+            self.LQG_opt = self.LQG(self.Kopt)
 
     @staticmethod
     def eig(A: np.ndarray) -> np.ndarray:
@@ -199,25 +208,34 @@ class LinearSystemContainer:
             C_K = F
             K = self.mat2block(A_K, B_K, C_K)
         else:
-            r = .5
-            while True:
-                A_Kopt, B_Kopt, C_Kopt = self.block2mat(self.Kopt)
-                A_K = A_Kopt + r*np.random.randn(self.n,self.n)
-                B_K = B_Kopt + r*np.random.randn(self.n,self.p)
-                C_K = C_Kopt + r*np.random.randn(self.m,self.n)
-                K0 = self.mat2block(A_K, B_K, C_K)
-                if self.is_stabilizing(K0) and self.is_minimal(A_K, B_K, C_K):
-                    break
-
+            if self.is_full_ordered:
+                r = .5
+                while True:
+                    A_Kopt, B_Kopt, C_Kopt = self.block2mat(self.Kopt)
+                    A_K = A_Kopt + r*np.random.randn(self.n, self.n)
+                    B_K = B_Kopt + r*np.random.randn(self.n, self.p)
+                    C_K = C_Kopt + r*np.random.randn(self.m, self.n)
+                    K = self.mat2block(A_K, B_K, C_K)
+                    if self.is_stabilizing(K) and self.is_minimal(A_K, B_K, C_K):
+                        break
+            else:
+                r = 10
+                while True:
+                    A_K = r*np.random.randn(self.q, self.q)
+                    B_K = r*np.random.randn(self.q, self.p)
+                    C_K = r*np.random.randn(self.m, self.q)
+                    K = self.mat2block(A_K, B_K, C_K)
+                    if self.is_stabilizing(K) and self.is_minimal(A_K, B_K, C_K):
+                        break
         return K
     
     def block2mat(self, P: np.ndarray) -> np.ndarray:
         """Returns the system matrices A,B,C from the given block matix P."""
-        if P.shape != (self.n + self.m, self.n + self.p):
+        if P.shape != (self.q + self.m, self.q + self.p):
             raise ValueError("P has incorrect dimensions.")
-        A = P[-self.n:, -self.n:]
-        B = P[-self.n:, :self.p]
-        C = P[:self.m, -self.n:]
+        A = P[-self.q:, -self.q:]
+        B = P[-self.q:, :self.p]
+        C = P[:self.m, -self.q:]
         return A, B, C
 
     def coords_trans(self, T: np.ndarray, P: np.ndarray) -> np.ndarray:
@@ -246,15 +264,15 @@ class LinearSystemContainer:
         _, B_K, _ = self.block2mat(K)
         return np.block([
             [self.I_n, np.zeros((self.n, self.p))],
-            [np.zeros((self.n, self.n)), B_K]
+            [np.zeros((self.q, self.n)), B_K]
         ])
 
     def Ccl(self, K: np.ndarray) -> np.ndarray:
         """Constructs the closed-loop output matrix with the controller K."""
         _, _, C_K = self.block2mat(K)
         return np.block([
-            [self.C, np.zeros((self.n, self.p)).T],
-            [np.zeros((self.n, self.m)).T, C_K]
+            [self.C, np.zeros((self.p, self.q))],
+            [np.zeros((self.m, self.n)), C_K]
         ])
     
     def Dcl(self) -> np.ndarray:
@@ -273,9 +291,9 @@ class LinearSystemContainer:
             [F@self.C, E]
         ])
     
-    def dBcl(self, V:np.ndarray) -> np.ndarray:
+    def dBcl(self, V: np.ndarray) -> np.ndarray:
         _, F, _ = self.block2mat(V)
-        out = np.zeros((self.n + self.m, self.n + self.p))
+        out = np.zeros((self.n + self.q, self.n + self.p))
         out[self.n:,self.p:] = F
         return out
     
@@ -309,16 +327,16 @@ class LinearSystemContainer:
         """Computes the Wcl(.) operator at K."""
         _, B_K, _ = self.block2mat(K)
         return np.block([
-            [self.W, np.zeros((self.n, self.n))],
-            [np.zeros((self.n, self.n)), B_K@self.V@B_K.T]
+            [self.W, np.zeros((self.n, self.q))],
+            [np.zeros((self.q, self.n)), B_K@self.V@B_K.T]
         ])
 
     def Qcl(self, K: np.ndarray) -> np.ndarray:
         """Computes the Qcl(.) operator at K."""
         _, _, C_K = self.block2mat(K)
         return np.block([
-            [self.Q, np.zeros((self.n, self.n))],
-            [np.zeros((self.n, self.n)), C_K.T@self.R@C_K]
+            [self.Q, np.zeros((self.n, self.q))],
+            [np.zeros((self.q, self.n)), C_K.T@self.R@C_K]
         ])
 
     def LQG(self, K: np.ndarray) -> float:
