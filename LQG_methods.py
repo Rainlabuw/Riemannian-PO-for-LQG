@@ -190,7 +190,7 @@ class ControllerContainer:
             R: np.ndarray, 
             W: np.ndarray,
             V: np.ndarray,
-            q: int = None
+            q: int = None,
         ) -> None:
         
         self.A = A # state matrix
@@ -203,12 +203,13 @@ class ControllerContainer:
         self.n = A.shape[0] # state dim
         self.m = B.shape[1] # input dim
         self.p = C.shape[0] # output dim
+
         if q is None or q == self.n:
             self.q = self.n
-            self.is_full_ordered = True
+            self.full_ordered = True
         else:
             self.q = q
-            self.is_full_ordered = False
+            self.full_ordered = False
 
         # ensure (A,B,C) is in minimal state-space form
         if not ControllerContainer.is_minimal(A, B, C):
@@ -228,15 +229,24 @@ class ControllerContainer:
         self.I_q = np.eye(self.q)
 
         self.basis = []
-        for i in range(self.q + self.m):
-            for j in range(self.q + self.p):
-                if i >= self.m or j >= self.p:
-                    E = np.zeros((self.q + self.m, self.q + self.p))
-                    E[i,j] = 1
-                    self.basis.append(E)
+        for i in range(self.q):
+            for j in range(self.q):
+                E = np.zeros((self.q + self.m, self.q + self.p))
+                E[self.m + i, self.p + j] = 1
+                self.basis.append(E)
+        for i in range(self.q):
+            for j in range(self.p):
+                E = np.zeros((self.q + self.m, self.q + self.p))
+                E[self.m + i, j] = 1
+                self.basis.append(E)
+        for i in range(self.m):
+            for j in range(self.q):
+                E = np.zeros((self.q + self.m, self.q + self.p))
+                E[i, self.p + j] = 1
+                self.basis.append(E)
         self.N = len(self.basis)
 
-        if self.is_full_ordered:
+        if self.full_ordered:
             Fopt = ControllerContainer.lqr(self.A, self.B, self.Q, self.R)
             Lopt = ControllerContainer.lqr(self.A.T, self.C.T, self.W, self.V).T
             A_Kopt = A + B@Fopt + Lopt@C
@@ -365,8 +375,8 @@ class ControllerContainer:
         """Returns a random stabilizing output feedback system. K is generated 
         by choosing a random K r=.5 distance away from K0."""
 
-        if self.is_full_ordered:
-            r = .5
+        if self.full_ordered:
+            r = .01
             while True:
                 A_Kopt, B_Kopt, C_Kopt = self.block2mat(self.Kopt)
                 A_K = A_Kopt + r*np.random.randn(self.n, self.n)
@@ -484,8 +494,6 @@ class ControllerContainer:
     
     def dX(self, K: np.ndarray, V: np.ndarray) -> np.ndarray:
         """Computes the differential of X(.) at K along V."""
-        _, B_K, _ = self.block2mat(K)
-        _, F, _ = self.block2mat(V)
         out = self.dlyap(
             self.Acl(K), 
             self.Wcl(K), 
@@ -590,9 +598,10 @@ class ControllerContainer:
         G = np.zeros((self.N, self.N))
         for i in range(self.N):
             Ei = self.basis[i]
-            for j in range(self.N):
+            for j in range(i, self.N):
                 Ej = self.basis[j]
                 G[i,j] = self.g(K, Ei, Ej, w, Wc=Wc, Wo=Wo)
+                G[j,i] = G[i,j]
         return G
 
     def natural_grad_LQG(
@@ -605,7 +614,6 @@ class ControllerContainer:
         for i in range(self.N):
             Ei = self.basis[i]
             b[i] = self.dLQG(K, Ei)
-        x = np.zeros(self.N)
         L, low = cho_factor(G)
         x = cho_solve((L,low), b) # Chomsky Decomp. to speed up performance.
         V = np.zeros((self.q + self.m, self.q + self.p))
@@ -631,7 +639,7 @@ class ControllerContainer:
         K = K0.copy()
         for t in range(num_steps):
             LQG_K = self.LQG(K)
-            if self.is_full_ordered:
+            if self.full_ordered:
                 error = LQG_K - self.LQG_opt
             else:
                 error = LQG_K
@@ -668,3 +676,45 @@ class ControllerContainer:
                 log(s): {np.round(np.log10(s), 3)}" \
             )
         return error_hist
+    
+
+    def sym_Hess(self, K, Delta):
+        _, B_K, C_K = self.block2mat(K)
+        Delta_A, Delta_B, Delta_C = self.block2mat(Delta)
+        X_K = self.X(K)
+        M1 = np.block([
+            [np.zeros((self.n, self.n)), self.B@Delta_C],
+            [Delta_B@self.C, Delta_A]
+        ])@X_K + \
+        X_K@np.block([
+            [np.zeros((self.n, self.n)), self.B@Delta_C],
+            [Delta_B@self.C, Delta_A]
+        ]).T + \
+        np.block([
+            [np.zeros((self.n, self.n)), np.zeros((self.n, self.q))],
+            [np.zeros((self.q, self.n)), B_K@self.V@Delta_B.T + Delta_B@self.V@B_K.T]
+        ])
+        X_K_prime = self.lyap(self.Acl(K), M1)
+        Y_K = self.Y(K)
+        A1 = np.block([
+            [np.zeros((self.n, self.n)), self.B@Delta_C],
+            [Delta_B@self.C, Delta_A]
+        ])
+        A2 = np.block([
+            [np.zeros((self.n, self.n)), np.zeros((self.n, self.q))],
+            [np.zeros((self.q, self.n)), C_K.T@self.R@Delta_C]
+        ])
+        A3 = np.block([
+            [np.zeros((self.n, self.n)), np.zeros((self.n, self.q))],
+            [np.zeros((self.q, self.n)), Delta_B@self.V@Delta_B.T]
+        ])
+        A4 = np.block([
+            [np.zeros((self.n, self.n)), np.zeros((self.n, self.q))],
+            [np.zeros((self.q, self.n)), Delta_C.T@self.R@Delta_C]
+        ])
+        return 2*np.trace(
+            2*A1@X_K_prime@Y_K + 2*A2@X_K_prime + A3@Y_K + A4@X_K
+        )
+    
+    def Hess(self, K, V1, V2):
+        return 1/4*(self.sym_Hess(K, V1 + V2) - self.sym_Hess(K, V1 - V2))
