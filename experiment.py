@@ -130,7 +130,7 @@ def create_plot(
     ):   
     A, B, C, Q, R, W, V, n, m, p = system()
 
-    sys = LinearSystemContainer(A, B, C, Q, R, W, V)
+    sys = ControllerContainer(A, B, C, Q, R, W, V)
 
     K0 = sys.rand()
 

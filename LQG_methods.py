@@ -7,7 +7,7 @@ import numpy as np
 import control as ct
 from scipy.linalg import sqrtm, cho_solve, cho_factor
 
-class LinearSystemContainer:
+class ControllerContainer:
     """A container of various methods for conducting gradient descent over
     the domain of stabilizing output-feedback controllers for a given
     plant P. 
@@ -48,15 +48,15 @@ class LinearSystemContainer:
         self.p = C.shape[0] # output dim
 
         # ensure (A,B,C) is in minimal state-space form
-        if not LinearSystemContainer.is_minimal(A, B, C):
+        if not ControllerContainer.is_minimal(A, B, C):
             raise ValueError("(A,B,C) is not minimal.")
         
         # ensure (A,W) is controllable so LQG is well-defined
-        if not LinearSystemContainer.is_controllable(A, sqrtm(W)):
+        if not ControllerContainer.is_controllable(A, sqrtm(W)):
             raise ValueError("(A,sqrt(W)) is not controllable.")
         
         # ensure (A,Q) is observable so LQG is well-defined
-        if not LinearSystemContainer.is_observable(A, sqrtm(Q)):
+        if not ControllerContainer.is_observable(A, sqrtm(Q)):
             raise ValueError("(A,sqrt(Q)) is not observable.")
         
         self.I_n = np.eye(self.n)
@@ -72,8 +72,8 @@ class LinearSystemContainer:
                     self.basis.append(E)
         self.N = len(self.basis)
 
-        Fopt = LinearSystemContainer.lqr(self.A, self.B, self.Q, self.R)
-        Lopt = LinearSystemContainer.lqr(self.A.T, self.C.T, self.W, self.V).T
+        Fopt = ControllerContainer.lqr(self.A, self.B, self.Q, self.R)
+        Lopt = ControllerContainer.lqr(self.A.T, self.C.T, self.W, self.V).T
         A_Kopt = A + B@Fopt + Lopt@C
         B_Kopt = -Lopt
         C_Kopt = Fopt
@@ -94,14 +94,14 @@ class LinearSystemContainer:
     @staticmethod
     def is_positive_semidefinite(A: np.ndarray, tol: float = 1e-5) -> bool:
         """returns true if A is positive semi-definite, within tolerance tol."""
-        return LinearSystemContainer.is_symmetric(A, tol) and \
-            min(LinearSystemContainer.eig(A)) >= 0
+        return ControllerContainer.is_symmetric(A, tol) and \
+            min(ControllerContainer.eig(A)) >= 0
     
     @staticmethod
     def is_positive_definite(A: np.ndarray, tol: float = 1e-5) -> bool:
         """returns true if A is positive definite, within tolerance tol."""
-        return LinearSystemContainer.is_symmetric(A, tol) and \
-            min(LinearSystemContainer.eig(A)) > tol
+        return ControllerContainer.is_symmetric(A, tol) and \
+            min(ControllerContainer.eig(A)) > tol
 
     @staticmethod
     def lqr(
@@ -126,19 +126,19 @@ class LinearSystemContainer:
     def is_minimal(A: np.ndarray, B: np.ndarray, C: np.ndarray) -> bool:
         """Returns true if (A,B) is controllable and (A,C) is observable, and
         false otherwise."""
-        return LinearSystemContainer.is_controllable(A, B) and \
-            LinearSystemContainer.is_observable(A, C)
+        return ControllerContainer.is_controllable(A, B) and \
+            ControllerContainer.is_observable(A, C)
 
     @staticmethod
     def alpha(A: np.ndarray) -> float:
         """Computes the spectral absicca of A. That is, max real part of the 
         eigenvalues."""
-        return np.max(np.real(LinearSystemContainer.eig(A)))
+        return np.max(np.real(ControllerContainer.eig(A)))
     
     @staticmethod
     def is_stable(A: np.ndarray, tol:float = 1e-5) -> bool:
         """returns true if A is Hurwitz stable, within tolerance tol."""
-        return LinearSystemContainer.alpha(A) < -tol
+        return ControllerContainer.alpha(A) < -tol
 
     @staticmethod
     def mat2block(A: np.ndarray, B: np.ndarray, C: np.ndarray) -> np.ndarray:
@@ -166,9 +166,9 @@ class LinearSystemContainer:
 
         Throws error if Q is not symmetric.
         """
-        if not LinearSystemContainer.is_symmetric(Q):
+        if not ControllerContainer.is_symmetric(Q):
             raise ValueError("Q is not symmetric.")
-        return ct.lyap(A, LinearSystemContainer.sym(Q))
+        return ct.lyap(A, ControllerContainer.sym(Q))
     
     @staticmethod
     def dlyap(
@@ -177,10 +177,10 @@ class LinearSystemContainer:
         """Returns the differential of the Lyapunov operator at (A,Q) along 
         direction (E,F). Here, E,F are arbitrary matrices of the correct 
         dimensions; A is Hurwitz stable, and Q is positive semi-definite."""
-        return LinearSystemContainer.lyap(
+        return ControllerContainer.lyap(
             A, 
-            E@LinearSystemContainer.lyap(A, Q) + \
-                LinearSystemContainer.lyap(A, Q)@E.T + F
+            E@ControllerContainer.lyap(A, Q) + \
+                ControllerContainer.lyap(A, Q)@E.T + F
         )
     
     def rand(self, pole_placement:bool = True) -> np.ndarray:

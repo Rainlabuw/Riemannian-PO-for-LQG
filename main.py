@@ -24,7 +24,7 @@ V = np.random.randn(p,p)
 V = V@V.T
 W = np.random.randn(n,n)
 W = W@W.T
-sys = LinearSystemContainer(A, B, C, Q, R, W, V)
+sys = ControllerContainer(A, B, C, Q, R, W, V)
 
 # pick initial point
 K0 = sys.rand()
