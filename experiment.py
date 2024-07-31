@@ -144,13 +144,13 @@ def create_plot(
     #     if sys.is_stabilizing(K0) and sys.is_minimal(K0):
     #         break
 
-    error_RGD2 = sys.run_RGD_with_backtracking(
+    error_RGD2, _ = sys.run_RGD_with_backtracking(
         num_steps, alpha, beta, eps, s_bar, K0,w=(1,1,1)
     )
-    error_RGD3 = sys.run_RGD_with_backtracking(
+    error_RGD3, _ = sys.run_RGD_with_backtracking(
         num_steps, alpha, beta, eps, s_bar, K0, w=(1,0,0)
     )
-    error_GD = sys.run_RGD_with_backtracking(
+    error_GD, _ = sys.run_RGD_with_backtracking(
         num_steps, alpha, beta, eps, s_bar, K0
     )
     

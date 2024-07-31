@@ -30,12 +30,12 @@ sys = ControllerContainer(A, B, C, Q, R, W, V)
 K0 = sys.rand()
 
 # conduct Euclidean gradient descent
-error_GD = sys.run_RGD_with_backtracking(
+error_GD, _ = sys.run_RGD_with_backtracking(
     num_steps, alpha, beta, eps, s_bar, K0
 )
 
 # conduct Riemannian gradient descent wrt KM-metric
-error_RGD = sys.run_RGD_with_backtracking(
+error_RGD, _ = sys.run_RGD_with_backtracking(
     num_steps, alpha, beta, eps, s_bar, K0, w=(1,1,1)
 )
 

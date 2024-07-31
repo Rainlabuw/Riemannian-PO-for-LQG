@@ -475,7 +475,10 @@ class ControllerContainer:
             else:
                 K_dot = self.natural_grad_LQG(K, w)
                 K_dot_2norm = self.g(K, K_dot, K_dot, w)
+                #K_dot_2norm = np.linalg.norm(K_dot)**2
+            
             if K_dot_2norm < eps**2:
+                
                 break
             s = s_bar
             Kplus = K - s*K_dot
@@ -484,6 +487,7 @@ class ControllerContainer:
                 self.is_minimal(*self.block2mat(Kplus)) and
                 LQG_K - self.LQG(Kplus) >= alpha*s*K_dot_2norm
             ):
+                
                 s *= beta 
                 Kplus = K - s*K_dot
                 if s < 1e-100:
@@ -497,4 +501,4 @@ class ControllerContainer:
                 log(norm(Kdot)): {np.round(np.log10(K_dot_2norm), 3)}, \
                 log(s): {np.round(np.log10(s), 3)}" \
             )
-        return error_hist
+        return error_hist, K
