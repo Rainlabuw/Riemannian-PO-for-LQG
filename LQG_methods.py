@@ -199,14 +199,14 @@ class ControllerContainer:
             C_K = F
             K = self.mat2block(A_K, B_K, C_K)
         else:
-            r = .5
+            r = .01
             while True:
                 A_Kopt, B_Kopt, C_Kopt = self.block2mat(self.Kopt)
                 A_K = A_Kopt + r*np.random.randn(self.n,self.n)
                 B_K = B_Kopt + r*np.random.randn(self.n,self.p)
                 C_K = C_Kopt + r*np.random.randn(self.m,self.n)
-                K0 = self.mat2block(A_K, B_K, C_K)
-                if self.is_stabilizing(K0) and self.is_minimal(A_K, B_K, C_K):
+                K = self.mat2block(A_K, B_K, C_K)
+                if self.is_stabilizing(K) and self.is_minimal(A_K, B_K, C_K):
                     break
 
         return K
@@ -273,11 +273,19 @@ class ControllerContainer:
             [F@self.C, E]
         ])
     
-    def dBcl(self, V:np.ndarray) -> np.ndarray:
+    def dBcl(self, V: np.ndarray) -> np.ndarray:
         _, F, _ = self.block2mat(V)
-        out = np.zeros((self.n + self.m, self.n + self.p))
-        out[self.n:,self.p:] = F
-        return out
+        return np.block([
+            [np.zeros((self.n, self.n)), np.zeros((self.n, self.p))],
+            [np.zeros((self.n, self.n)), F]
+        ])
+    
+    def dCcl(self, V):
+        _, _, G = self.block2mat(V)
+        return np.block([
+            [np.zeros((self.p, self.n)), np.zeros((self.p, self.n))],
+            [np.zeros((self.m, self.n)), G]
+        ])
     
     def X(self, K: np.ndarray) -> np.ndarray:
         """Computes the X(.) operator."""
@@ -364,6 +372,15 @@ class ControllerContainer:
         dC_K = 2*(self.R@C_K@X22 + self.B.T@Y11@X12 + self.B.T@Y12@X22)
         return self.mat2block(dA_K, dB_K, dC_K)
     
+    def grad_LQG_coords(self, K):
+        V = self.grad_LQG(K)
+        v = np.zeros(self.N)
+        for i in range(self.N):
+            Ei = self.basis[i]
+            v[i] = self.dLQG(K, Ei)
+        return v
+    
+    
     def g(
         self, K: np.ndarray, V: np.ndarray, W: np.ndarray, w: tuple, **kwargs
     ) -> float:
@@ -446,6 +463,19 @@ class ControllerContainer:
             Ei = self.basis[i]
             V += x[i]*Ei
         return V
+    
+    def natural_grad_LQG_coords(
+        self, K: np.ndarray, w: tuple
+    ) -> np.ndarray:
+        G = self.g_coords(w, K)
+        b = np.zeros(self.N)
+        for i in range(self.N):
+            Ei = self.basis[i]
+            b[i] = self.dLQG(K, Ei)
+        x = np.zeros(self.N)
+        L, low = cho_factor(G)
+        x = cho_solve((L,low), b)
+        return x
 
     def run_RGD_with_backtracking(
         self, 
@@ -493,7 +523,6 @@ class ControllerContainer:
                 if s < 1e-100:
                     raise ValueError("Backtracking failed.")
             K = Kplus 
-            
             print(
                 f"time: {t}, \
                 LQG: {np.round(LQG_K, 3)}, \
@@ -502,3 +531,162 @@ class ControllerContainer:
                 log(s): {np.round(np.log10(s), 3)}" \
             )
         return error_hist, K
+    
+
+    def sym_Hess(self, K, Delta):
+        _, B_K, C_K = self.block2mat(K)
+        Delta_A, Delta_B, Delta_C = self.block2mat(Delta)
+        X_K = self.X(K)
+        M1 = np.block([
+            [np.zeros((self.n, self.n)), self.B@Delta_C],
+            [Delta_B@self.C, Delta_A]
+        ])@X_K + \
+        X_K@np.block([
+            [np.zeros((self.n, self.n)), self.B@Delta_C],
+            [Delta_B@self.C, Delta_A]
+        ]).T + \
+        np.block([
+            [np.zeros((self.n, self.n)), np.zeros((self.n, self.n))],
+            [np.zeros((self.n, self.n)), B_K@self.V@Delta_B.T + Delta_B@self.V@B_K.T]
+        ])
+        X_K_prime = self.lyap(self.Acl(K), M1)
+        Y_K = self.Y(K)
+        A1 = np.block([
+            [np.zeros((self.n, self.n)), self.B@Delta_C],
+            [Delta_B@self.C, Delta_A]
+        ])
+        A2 = np.block([
+            [np.zeros((self.n, self.n)), np.zeros((self.n, self.n))],
+            [np.zeros((self.n, self.n)), C_K.T@self.R@Delta_C]
+        ])
+        A3 = np.block([
+            [np.zeros((self.n, self.n)), np.zeros((self.n, self.n))],
+            [np.zeros((self.n, self.n)), Delta_B@self.V@Delta_B.T]
+        ])
+        A4 = np.block([
+            [np.zeros((self.n, self.n)), np.zeros((self.n, self.n))],
+            [np.zeros((self.n, self.n)), Delta_C.T@self.R@Delta_C]
+        ])
+        return 2*np.trace(
+            2*A1@X_K_prime@Y_K + 2*A2@X_K_prime + A3@Y_K + A4@X_K
+        )
+
+    def Hess(self, K, V1, V2):
+        return 1/4*(self.sym_Hess(K, V1 + V2) - self.sym_Hess(K, V1 - V2))
+    
+    def Hess_coords(self, K):
+        H = np.zeros((self.N, self.N))
+        for i in range(self.N):
+            Ei = self.basis[i]
+            for j in range(i, self.N):
+                Ej = self.basis[j]
+                H_ij = self.Hess(K, Ei, Ej)
+                H[i,j] = H_ij
+                H[j,i] = H_ij
+        return H
+    
+    def Wc(self, K):
+        return self.lyap(
+            self.Acl(K),
+            self.Bcl(K)@self.Bcl(K).T
+        )
+    
+    def Wo(self, K):
+        return self.lyap(
+            self.Acl(K).T,
+            self.Ccl(K).T@self.Ccl(K)
+        )
+    
+    def dWc(self, K, V):
+        return self.dlyap(
+            self.Acl(K), 
+            self.Bcl(K)@self.Bcl(K).T,
+            self.dAcl(V),
+            self.Bcl(K)@self.dBcl(V).T + self.dBcl(V)@self.Bcl(K).T
+        )
+
+    def dWo(self, K, V):
+        return self.dlyap(
+            self.Acl(K).T, 
+            self.Ccl(K).T@self.Ccl(K),
+            self.dAcl(V).T,
+            self.Ccl(K).T@self.dCcl(V) + self.dCcl(V).T@self.Ccl(K)
+        )
+    
+    def dg_ij_k(self, K, i, j, k, w):
+        Ei = self.basis[i]
+        Ej = self.basis[j]
+        Ek = self.basis[k]
+        return w[0]*np.trace(
+            self.dWo(K, Ek)@self.dAcl(Ei)@self.Wc(K)@self.dAcl(Ej).T + \
+            self.Wo(K)@self.dAcl(Ei)@self.dWc(K, Ek)@self.dAcl(Ej).T
+        ) + \
+        w[1]*np.trace(
+            self.dBcl(Ei).T@self.dWo(K,Ek)@self.dBcl(Ej)
+        ) + \
+        w[2]*np.trace(
+            self.dCcl(Ei)@self.dWc(K,Ek)@self.dCcl(Ej).T
+        )
+
+    def Christoffel_symbols(self, K, w):
+        G = self.g_coords(w,K)
+        inv_G = np.linalg.inv(G)
+        dWc_array = []
+        dWo_array = []
+        Wc_K = self.Wc(K)
+        Wo_K = self.Wo(K)
+        for i in range(self.N):
+            Ei = self.basis[i]
+            dWc_i = self.dWc(K, Ei)
+            dWo_i = self.dWo(K, Ei)
+            dWc_array.append(dWc_i)
+            dWo_array.append(dWo_i)
+        dg = np.zeros((self.N, self.N, self.N))
+        for i in range(self.N):
+            Ei = self.basis[i]
+            for j in range(self.N):
+                Ej = self.basis[j]
+                for k in range(self.N):
+                    dg_ijk = w[0]*np.trace(
+                        dWo_array[k]@self.dAcl(Ei)@Wc_K@self.dAcl(Ej).T + \
+                        Wo_K@self.dAcl(Ei)@dWc_array[k]@self.dAcl(Ej).T
+                    ) + \
+                    w[1]*np.trace(
+                        self.dBcl(Ei).T@dWo_array[k]@self.dBcl(Ej)
+                    ) + \
+                    w[2]*np.trace(
+                        self.dCcl(Ei)@dWc_array[k]@self.dCcl(Ej).T
+                    )
+                    dg[i,j,k] = dg_ijk
+        Gamma = np.zeros((self.N, self.N, self.N))
+        for i in range(self.N):
+            for j in range(i, self.N):
+                for k in range(self.N):
+                    Gamma_ijk = 0
+                    for l in range(self.N):
+                        Gamma_ijk += inv_G[k,l]*(
+                            dg[l,j,i] + dg[i,l,j] - dg[i,j,l]
+                        )
+                    Gamma_ijk = Gamma_ijk/2    
+                    Gamma[i,j,k] = Gamma_ijk
+                    Gamma[j,i,k] = Gamma_ijk
+        return Gamma
+    
+    def natural_Hess_coords(self, K, w):
+        Gamma = self.Christoffel_symbols(K, w)
+        H = self.Hess_coords(K)
+        v = np.zeros(self.N)
+        for i in range(self.N):
+            Ei = self.basis[i]
+            vi = self.dLQG(K, Ei)
+            v[i] = vi
+        nat_H = np.zeros((self.N, self.N))
+        for i in range(self.N):
+            for j in range(i, self.N):
+                Hij = H[i,j]
+                Hij = Hij - np.dot(Gamma[i,j,:], v)
+                nat_H[i,j] = Hij
+                nat_H[j,i] = Hij
+        return nat_H
+
+
